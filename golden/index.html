@@ -3189,7 +3189,7 @@ pintaBoton(); pintaBarra();
 /* ── 8 · versión visible ─────────────────────────────────────────────────
    Sin número de versión no se sabe qué archivo se tiene delante. Va en la
    cabecera, en el título de la pestaña y al pie de la oferta exportada. */
-const VERSION = 'V3.2';
+const VERSION = 'V3.3';
 const VFECHA  = '27-08-2026';
 window.BENTLEY_VERSION = VERSION;
 window.BENTLEY_FECHA   = VFECHA;
@@ -3713,19 +3713,20 @@ const VSEL = {};                    /* acabado elegido por producto */
 let MODELO = [];
 
 const enQuote = sku => QUOTE.find(l => l.sku === sku);
-function activo(p){                  /* qué referencia de este producto está puesta */
-  for (const v of p.vars){
-    const it = BYSKU[v.sku] || {};
-    const l = enQuote(skuPlug(v.sku)) || enQuote(v.sku) || (it.alt ? enQuote(it.alt) : null);
-    if (l) return l;
-  }
-  return null;
+/* v4.1.3: cada color és una línia pròpia; es poden tenir diversos colors alhora */
+function lineaDe(v){
+  const it = BYSKU[v.sku] || {};
+  return enQuote(skuPlug(v.sku)) || enQuote(v.sku) || (it.alt ? enQuote(it.alt) : null);
 }
+function lineas(p){ return p.vars.map(lineaDe).filter(Boolean); }
 function vIndex(p){
-  const l = activo(p);
-  if (l){ const i = p.vars.findIndex(v => skuPlug(v.sku) === l.sku || v.sku === l.sku);
-          if (i >= 0) return i; }
-  return VSEL[p.k] || 0;
+  if (VSEL[p.k] != null) return VSEL[p.k];
+  const i = p.vars.findIndex(v => lineaDe(v));
+  return i >= 0 ? i : 0;
+}
+function activo(p){                  /* la línia del color que es veu ara a la targeta */
+  const v = p.vars[vIndex(p)] || p.vars[0];
+  return v ? lineaDe(v) : null;
 }
 const esc2 = s => String(s == null ? '' : s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3734,10 +3735,10 @@ const esc2 = s => String(s == null ? '' : s)
 function tarjeta(p){
   const vi = vIndex(p), v = p.vars[vi] || p.vars[0];
   const sku = skuPlug(v.sku);
-  const l = activo(p), on = !!l;
+  const l = activo(p), on = lineas(p).length > 0;
   const pu = precio(sku);
   const sw = p.vars.length > 1
-    ? p.vars.map((x,k) => '<button class="sw' + (k === vi ? ' on' : '') + '" style="background:' +
+    ? p.vars.map((x,k) => '<button class="sw' + (k === vi ? ' on' : '') + (lineaDe(x) ? ' q' : '') + '" style="background:' +
         (x.col || '#DDD') + '" title="' + esc2(vari(x) + ' · ' + x.sku) +
         '" data-sw="' + p.k + '" data-vi="' + k + '"></button>').join('') +
       '<span class="nom">' + esc2(vari(v) !== '—' ? vari(v) : '') + ' · ' + sku + '</span>'
@@ -3754,7 +3755,7 @@ function tarjeta(p){
       '<div class="sw2">' + sw + '</div>' +
       '<div class="paso">' +
         '<button data-mn="' + p.k + '">&minus;</button>' +
-        '<input type="number" min="0" step="1" data-qm="' + p.k + '" value="' + (on ? +(+l.qty).toFixed(2) : 0) + '">' +
+        '<input type="number" min="0" step="1" data-qm="' + p.k + '" value="' + (l ? +(+l.qty).toFixed(2) : 0) + '">' +
         '<button data-mp="' + p.k + '">+</button>' +
       '</div>' +
       '<button class="ficha2" data-ficha="' + sku + '">' + esc2(t('sel_sheet')) + '</button>' +
@@ -3764,9 +3765,8 @@ function tarjeta(p){
 function importeUbi(u){
   let tot = 0, n = 0;
   u.familias.forEach(f => f.prods.forEach(p => {
-    const l = activo(p); if (!l) return;
-    const pu = precio(l.sku); n++;
-    if (pu !== undefined) tot += pu * l.qty * (1 - (l.dto||0)/100);
+    lineas(p).forEach(l => { const pu = precio(l.sku); n++;
+      if (pu !== undefined) tot += pu * l.qty * (1 - (l.dto||0)/100); });
   }));
   return {tot, n};
 }
@@ -3794,8 +3794,8 @@ function pinta(){
       '</div><div class="gbody">';
     u.familias.forEach(f => {
       let sel = 0, coste = 0;
-      f.prods.forEach(p => { const l = activo(p); if (!l) return; sel++;
-        const pu = precio(l.sku); if (pu !== undefined) coste += pu * l.qty; });
+      f.prods.forEach(p => lineas(p).forEach(l => { sel++;
+        const pu = precio(l.sku); if (pu !== undefined) coste += pu * l.qty; }));
       const fk2 = u.k + '|' + f.sub;
       const fopen = busca || FAB.has(fk2);
       h += '<div class="fila' + (fopen ? ' fabierta' : '') + '"><div class="lab" data-fg="' + esc2(fk2) + '">' +
@@ -3838,20 +3838,20 @@ function refresca(k){
     /* se actualiza la tarjeta en su sitio, sin rehacerla: así el cursor no se
        sale del contador mientras se teclea una cantidad */
     const vi = vIndex(p), v = p.vars[vi] || p.vars[0], sku = skuPlug(v.sku);
-    const l = activo(p), on = !!l, pu = precio(sku);
+    const l = activo(p), on = lineas(p).length > 0, pu = precio(sku);
     el.classList.toggle('on', on);
     const im = el.querySelector('.mini img');
     if (im){ const nueva = img(sku); if (im.getAttribute('src') !== nueva) im.src = nueva; }
     const em = el.querySelector('.n em');
     if (em){ em.className = (pu === undefined) ? 'sin' : '';
              em.textContent = (pu === undefined) ? t('no_price') : money(pu); }
-    el.querySelectorAll('.sw').forEach((b, i2) => b.classList.toggle('on', i2 === vi));
+    el.querySelectorAll('.sw').forEach((b, i2) => { b.classList.toggle('on', i2 === vi); b.classList.toggle('q', !!lineaDe(p.vars[i2])); });
     const nom = el.querySelector('.sw2 .nom');
     if (nom && p.vars.length > 1)
       nom.textContent = (vari(v) !== '—' ? vari(v) : '') + ' · ' + sku;
     const fi = el.querySelector('[data-ficha]'); if (fi) fi.dataset.ficha = sku;
     const inp = el.querySelector('[data-qm]');
-    if (inp && document.activeElement !== inp) inp.value = on ? l.qty : 0;
+    if (inp && document.activeElement !== inp) inp.value = l ? l.qty : 0;
   }
   const g = $('list').querySelector('.grupo[data-g="' + CSS.escape(o.u.k) + '"] .gsum');
   if (g){ const r = importeUbi(o.u);
@@ -3863,8 +3863,8 @@ function refresca(k){
     const fam = o.u.familias.find(f => f.prods.some(x => x.k === k));
     if (fila && fam){
       let sel = 0, coste = 0;
-      fam.prods.forEach(x => { const l2 = activo(x); if (!l2) return; sel++;
-        const pu2 = precio(l2.sku); if (pu2 !== undefined) coste += pu2 * l2.qty; });
+      fam.prods.forEach(x => lineas(x).forEach(l2 => { sel++;
+        const pu2 = precio(l2.sku); if (pu2 !== undefined) coste += pu2 * l2.qty; }));
       let cja = fila.querySelector('.lab .sub');
       if (sel && !cja){ cja = document.createElement('div'); cja.className = 'sub';
                         fila.querySelector('.lab').appendChild(cja); }
@@ -3910,12 +3910,10 @@ $('list').addEventListener('click', ev => {
   if (sw){ ev.stopPropagation();
     const k = sw.dataset.sw, ki = +sw.dataset.vi;
     const o = prod(k); if (!o) return;
+    const ja = lineaDe(o.p.vars[ki]);
+    if (ja && vIndex(o.p) === ki){ INTERNO = true; removeLine(ja.sku); refresca(k); INTERNO = false; return; }
     VSEL[k] = ki;
-    const l = activo(o.p);
-    INTERNO = true;
-    if (l){ const nuevo = skuPlug(o.p.vars[ki].sku);
-            if (nuevo !== l.sku){ const q = l.qty; removeLine(l.sku); addLine(nuevo, q); } }
-    refresca(k); INTERNO = false; return; }
+    refresca(k); return; }
   const mn = ev.target.closest('[data-mn]'), mp = ev.target.closest('[data-mp]');
   if (mn || mp){ ev.stopPropagation();
     const k = (mn || mp).dataset[mn ? 'mn' : 'mp']; const o = prod(k); if (!o) return;
@@ -3924,7 +3922,9 @@ $('list').addEventListener('click', ev => {
   const card = ev.target.closest('[data-p]');
   if (card && !ev.target.closest('input')){
     const o = prod(card.dataset.p); if (!o) return;
-    ponQty(o.p, activo(o.p) ? 0 : 1);
+    const tot = lineas(o.p);
+    if (tot.length){ INTERNO = true; tot.forEach(l => removeLine(l.sku)); refresca(o.p.k); INTERNO = false; }
+    else ponQty(o.p, 1);
   }
 });
 $('list').addEventListener('input', ev => {
@@ -6126,4 +6126,5 @@ window.__pdfPrep = async function(photoSrc){
   return out;
 };
 </script>
+<style id="motor414-css">.sw.q{box-shadow:0 0 0 2px #fff,0 0 0 3.5px #B08D57}.sw.q.on{box-shadow:0 0 0 2px #fff,0 0 0 3.5px #1F1E1C}</style>
 </body></html>
