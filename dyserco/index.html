@@ -36,7 +36,7 @@
 </form>
 <script>
 (function(){
-  var CFG = {"salt": "Z/Y1rTEgl79KxSS0fldijQ==", "iv": "znOYYE8L/2/PGJ5g", "it": 310000, "tag": "dyserco", "v": "/eqS03dY"};
+  var CFG = {"salt": "YnhzD6Pkckf9U6QikRmALA==", "iv": "URsOIr+S3dkvFsbV", "it": 310000, "tag": "dyserco", "v": "977b0436b4"};
   var LS = 'gate_' + CFG.tag;
   var $ = function(i){ return document.getElementById(i); };
   var b64 = function(s){ var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
@@ -53,7 +53,7 @@
   }
 
   // Descarrega el contingut xifrat mentre l'usuari escriu
-  var datos = fetch('d.bin?v=' + encodeURIComponent(CFG.v), {cache: 'no-cache'})
+  var datos = fetch('d-' + CFG.v + '.bin', {cache: 'force-cache'})
     .then(function(r){ if (!r.ok) throw new Error('net'); return r.arrayBuffer(); });
 
   function abrir(code, recordar){
